@@ -1,0 +1,129 @@
+---
+title: "NeuralNetworks"
+author: "Michael Rawat"
+date: "04/19/2022"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+The codes in this notebook closely follows the original notebook prepared by previous instructors of BIA 6303-Predictive Models: Myles Gartland, Harlan Hays and Xuan Pham. 
+
+## Universal Bank  
+
+You probably have seen the Universal Bank dataset before in BIA 6301: Applied Data Mining. The target variable is PersonalLoan, or whether a customer accepted a loan offer from Universal Bank.
+
+We are going to use the neuralnet package in R to build, train, and validate our neural network models.
+
+```{r}
+UB <- read.csv("https://raw.githubusercontent.com/bia6301/BIA6303PredictiveModels/master/Module5/data/UniversalBank.csv")
+```
+
+## Data Preprocessing
+
+```{r}
+str(UB)
+```
+
+```{r}
+UB <- UB[,c(-1,-5)]
+str(UB)
+```
+
+
+The neuralnet package requires all data to be in numeric format. We cannot have factors. First, we will create dummy variables for the factors.
+```{r}
+library(dummies)
+
+factors <- UB[,c(6,8:12)]
+
+dummies <- dummy.data.frame(factors)
+colnames(dummies)
+
+dummies.keep <- dummies[,c(-2,-4,-6,-8,-10,-12)]
+```
+
+Now we need to add these dummy variables together with the numeric variables. 
+```{r}
+numeric.cols<-UB[,c(1:5,7)] #pull out vars we want to normalize
+```
+
+```{r}
+df <- cbind(dummies.keep,numeric.cols)
+df <- df[,c(3,1,2,4:13)]#moving target variable to the first column
+```
+
+Now we can do our train/test split.  
+
+```{r}
+library(caret)
+trainIndex <- createDataPartition(df$PersonalLoanYes, p = .6, list = FALSE, times = 1)
+
+train <- df[trainIndex,]
+test  <- df[-trainIndex,]
+```
+Neural networks train and converge faster when all variables are normalized. Popular options include min-max normalization (range: 0 to 1) and z-score normalization (mean=0; standard deviation=1).
+
+We have to normalize the numeric columns in train and test separately.
+
+
+```{r}
+normalize<- function(x) #An R-function do carry out min-max normalization
+            {
+              return(
+             (x-min(x))/(max(x)-min(x)))
+            }
+```
+
+First, we will do min-max normalization on the training set.
+```{r}
+train.numeric.norm <- normalize(train[,8:13])
+
+train.norm <- cbind(train[,1:7], train.numeric.norm)
+```
+
+Second, we repeat the same task for the test set.
+```{r}
+test.numeric.norm <- normalize(test[,8:13])
+
+test.norm <- cbind(test[,1:7], test.numeric.norm)
+```
+
+```{r}
+library(neuralnet)
+set.seed(123)
+clf_nn <- neuralnet(PersonalLoanYes~., data=train.norm, lifesign='full')#be sure to look at the default setting
+
+plot(clf_nn)
+```
+
+```{r}
+set.seed(123)
+clf_nn <- neuralnet(PersonalLoanYes~., data=train.norm, hidden=2, threshold = 0.03, lifesign='full')#be sure to look at the default setting
+plot(clf_nn)
+```
+
+Now we validate our trained neural network classifier.
+
+```{r}
+options(scipen=999)
+target.predicted <- compute(clf_nn, test.norm[,-1])
+
+target.predicted.class <- factor(ifelse(target.predicted$net.result>=0.5,"yes","no"))
+
+target.test.class <- factor(ifelse(test$PersonalLoanYes==1,"yes","no"))
+```
+
+
+```{r}
+library(caret)
+confusionMatrix(target.predicted.class, target.test.class, positive="yes")
+```
+## More Examples
+
+Check out these blog posts for more examples (including a numeric prediction one): https://www.r-bloggers.com/neuralnet-train-and-test-neural-networks-using-r/ 
+https://www.analyticsvidhya.com/blog/2017/09/creating-visualizing-neural-network-in-r/ 
